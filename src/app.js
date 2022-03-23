@@ -1,8 +1,19 @@
 // Нахождение суммы элементов по строкам (столбцам) матрицы
 const {Worker, parentPort} = require("worker_threads");
 
-let matrixData = require('../resources/matrix500x100.json').matrix;
-let result = 0
+let matrixData = require('../resources/matrix1000x1000.json');
+let results = {
+    parallelResult: 0,
+    normalResult: 0,
+
+    parallelTime: null,
+    normalTime: null
+}
+
+const config = {
+    workers: 16,
+    interval: 10,
+}
 
 class Logger {
     static colours = {
@@ -35,8 +46,10 @@ class Logger {
 const mainLogger = new Logger('program\t', 'yellow')
 
 class Timer {
-    constructor() {
-        this.logger = new Logger('timer\t', 'magenta')
+    constructor(name) {
+        this.name = name
+
+        this.logger = new Logger(`timer-${this.name}`, 'magenta')
         this.startTime = null
         this.finishTime = null
     }
@@ -54,11 +67,9 @@ class Timer {
         this.duration = this.finishTime - this.startTime
 
         this.logger.logLine(`Затрачено времени: ${this.duration.toFixed(2)} мс.`)
+        results.parallelTime = this.duration
     }
 }
-
-const timer = new Timer()
-
 
 class SlaveWorker {
     constructor(id) {
@@ -74,8 +85,8 @@ class SlaveWorker {
 
         this.worker.on('message', ({action, payload}) => {
             if (action === 'RESULT') {
-                mainLogger.logLine(`Получен результат: ${payload}`)
-                result += payload
+                // mainLogger.logLine(`Получен результат: ${payload}`)
+                results.parallelResult += payload
 
                 this.busy = false
             } else if (action === 'error') {
@@ -101,39 +112,57 @@ class SlaveWorker {
 }
 
 function matrixSumParallel() {
+    const timer = new Timer('async')
     timer.start()
 
-    let rows = matrixData.length
-
-    mainLogger.logLine(`Матрица ${matrixData.length} рядов на ${matrixData[0].length} колонн загружена.`)
-
+    mainLogger.logLine(`Запуск зависимых процессов.`)
     let slaves = []
-    for (let id = 0; id < 4; id++) {
+    for (let id = 0; id < config.workers; id++) {
         slaves.push(new SlaveWorker(id))
     }
 
     mainLogger.logLine(`Запуск процесса.`)
+    let data = matrixData.matrix
+
     let roundRobinQueue = setInterval(() => {
         slaves.forEach(slave => {
             if (!slave.busy) {
-                if (matrixData.length > 0) {
-                    slave.task(matrixData.shift())
+                if (data.length > 0) {
+                    slave.task(data.shift())
                 }
             }
         })
 
-        if ((rows - matrixData.length) % 10 === 0) {
-            mainLogger.logLine(`Выполнение задания: ${(rows / matrixData.length).toFixed(2)}%. Осталось рядов: ${matrixData.length}`)
-        }
 
-        if (matrixData.length === 0 && slaves.every(slave => slave.busy === false)) {
-            mainLogger.logLine(`Задание выполнено. Результат: ${result}`)
+        if (data.length === 0 && slaves.every(slave => slave.busy === false)) {
+            mainLogger.logLine(`Асинхронное задание выполнено.`)
 
             slaves.forEach(slave => slave.kill())
             clearInterval(roundRobinQueue)
             timer.stop()
         }
-    }, 1000)
+        // } else if ((rows - data.length) % 10 === 0) {
+        //     mainLogger.logLine(`Выполнение задания: ${(rows / data.length).toFixed(2)}%. Осталось рядов: ${data.length}`)
+        // }
+    }, config.interval)
+}
+
+function matrixSumNormal() {
+    const timer = new Timer('sync')
+    timer.start()
+
+    let data = matrixData.matrix
+    mainLogger.logLine(`Матрица ${data.length} рядов на ${data[0].length} колонн загружена.`)
+
+    mainLogger.logLine(`Запуск процесса.`)
+
+    while (data.length > 0) {
+        results.normalResult += data.shift().reduce((partialSum, a) => partialSum + a, 0);
+    }
+
+    mainLogger.logLine(`Синхронное задание выполнено.`)
+    timer.stop()
 }
 
 matrixSumParallel()
+// matrixSumNormal()

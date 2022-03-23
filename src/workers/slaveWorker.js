@@ -5,13 +5,12 @@ function logLine(line) {
     console.log(`slave-worker-${id}\t| \x1b[36m${line} \x1b[0m`)
 }
 
-logLine(`Зависимый поток #${id} запущен.`)
-// parentPort.postMessage({action: 'ready'})
+// logLine(`Зависимый поток #${id} запущен.`)
 
 parentPort.on("message", data => {
     switch (data.action) {
         case 'NEW_TASK':
-            logLine('Получено новое задание.')
+            // logLine('Получено новое задание.')
 
             let row = data.payload
 
